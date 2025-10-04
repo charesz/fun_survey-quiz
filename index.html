@@ -20,15 +20,9 @@
         let userId = 'loading...';
         
         // Global variables provided by the environment
-        const firebaseConfig = {
-          apiKey: "AIzaSyBmc2RLvjsGvMLxPJPNtocNORAeaxKlJW8",
-          authDomain: "pixel-pilot-quiz.firebaseapp.com",
-          projectId: "pixel-pilot-quiz",
-          storageBucket: "pixel-pilot-quiz.firebasestorage.app",
-          messagingSenderId: "1094469101179",
-          appId: "1:1094469101179:web:2c48507930bcbbade0a4de",
-          measurementId: "G-JP3HYC7NV6"
-        };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         // Initialize Firebase and Authentication
         const setupFirebase = async () => {
@@ -713,3 +707,4 @@
     </script>
 </body>
 </html>
+
