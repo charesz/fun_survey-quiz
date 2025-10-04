@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Pilot Quiz: Ship Commander</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, addDoc, query, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Set log level to debug for console visibility
+        setLogLevel('Debug');
+
+        let app;
+        let db;
+        let auth;
+        let userId = 'loading...';
+        
+        // Global variables provided by the environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // Initialize Firebase and Authentication
+        const setupFirebase = async () => {
+            try {
+                if (Object.keys(firebaseConfig).length > 0) {
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                } else {
+                    console.warn("Firebase config is missing or empty.");
+                    return; 
+                }
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("User authenticated. UID:", userId);
+                        listenToHighScores();
+                    } else {
+                        userId = 'anonymous-' + crypto.randomUUID();
+                        console.log("User signed out or anonymous session active. Fallback ID:", userId);
+                    }
+                    // Update UI with userId
+                    document.getElementById('user-id-display').textContent = `PILOT ID: ${userId}`;
+                    document.getElementById('firebase-status').textContent = 'ONLINE';
+                });
+
+            } catch (error) {
+                console.error("Firebase setup failed:", error);
+                document.getElementById('firebase-status').textContent = 'ERROR';
+                document.getElementById('user-id-display').textContent = `PILOT ID: FAILED`;
+            }
+        };
+
+        // Firestore Logic to store user scores
+        const saveScore = async (finalScore, outcome) => {
+            const scoreData = {
+                userId: userId,
+                score: finalScore,
+                outcome: outcome, // 'Success' or 'Failure'
+                pilotName: window.gameState.pilotName, // Include pilot name
+                timestamp: serverTimestamp(),
+                appId: appId
+            };
+
+            const collectionPath = `/artifacts/${appId}/users/${userId}/quiz_scores`;
+            
+            try {
+                const docRef = await addDoc(collection(db, collectionPath), scoreData);
+                console.log("Score saved with ID: ", docRef.id);
+            } catch (e) {
+                console.error("Error adding document: ", e);
+            }
+        };
+
+        // Firestore Logic to listen to public high scores (placeholder)
+        const listenToHighScores = () => {
+            if (!db || !userId || !appId) return;
+
+            const collectionPath = `/artifacts/${appId}/users/${userId}/quiz_scores`;
+            
+            const q = query(collection(db, collectionPath));
+            
+            onSnapshot(q, (querySnapshot) => {
+                let highScores = [];
+                querySnapshot.forEach((doc) => {
+                    highScores.push(doc.data());
+                });
+                console.log("Quiz history updated:", highScores);
+                // In a future update(if anyone wanna try haha), this data could populate a leaderboard.
+            }, (error) => {
+                console.error("Error listening to scores:", error);
+            });
+        };
+
+        // Expose functions and variables to the global scope for use in game logic
+        window.setupFirebase = setupFirebase;
+        window.saveScore = saveScore;
+        window.getUserId = () => userId;
+    </script>
+
+    <style>
+        /* Retro Pixel Art Styling */
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        
+        body {
+            /*POINT 4: The video tag below handles the background. */
+            font-family: 'VT323', monospace;
+            color: #10B981; /* Neon green/emerald */
+            image-rendering: pixelated;
+            /* Added for video background layering */
+            position: relative; 
+            z-index: 1; 
+        }
+
+        /* VIDEO BACKGROUND STYLES */
+        #video-background {
+            position: fixed; 
+            right: 0;
+            bottom: 0;
+            min-width: 100%; /* Ensures it covers the width */
+            min-height: 100%; /* Ensures it covers the height */
+            width: auto;
+            height: auto;
+            z-index: -10; /* Sends it to the very back */
+            background-size: cover; /* Fallback */
+            filter: brightness(60%); /* Optional: Dims the video so the UI is more readable */
+        }
+
+        /* Base Pixelated Button/Box Style */
+        .pixel-box {
+            border: 4px solid #10B981; /* Neon border */
+            box-shadow: 
+                4px 4px 0 0 #047857, /* Darker inner shadow for depth */
+                -4px -4px 0 0 #34D399, /* Lighter inner shadow for bevel */
+                8px 8px 0 0 #000000; /* Chunky outer shadow */
+            background-color: #0F172A; /* Dark blue/almost black interior */
+            transition: all 0.1s;
+        }
+
+        .pixel-box:hover {
+            box-shadow: 
+                2px 2px 0 0 #047857,
+                -2px -2px 0 0 #34D399,
+                4px 4px 0 0 #000000;
+        }
+
+        .pixel-button {
+            @apply px-6 py-3 text-lg font-bold uppercase cursor-pointer;
+            border: 3px solid #10B981;
+            background-color: #065F46; /* Slightly lighter green background */
+            color: #FFFFFF;
+            letter-spacing: 1px;
+        }
+        
+        .pixel-button:hover {
+            background-color: #059669;
+            transform: translate(1px, 1px);
+        }
+        
+        .pixel-button:active {
+            box-shadow: 
+                1px 1px 0 0 #047857,
+                -1px -1px 0 0 #34D399,
+                2px 2px 0 0 #000000;
+        }
+
+        .heart-icon {
+            color: #EF4444; /* Red heart */
+            text-shadow: 1px 1px 0 #991B1B, -1px -1px 0 #FCA5A5; /* Pixel shadow effect */
+        }
+        
+        /* Specific input/option styles */
+        .pixel-option {
+            @apply pixel-button text-left w-full normal-case text-base;
+            background-color: #1E293B; /* Slate gray option background */
+            border-color: #475569;
+            color: #E2E8F0;
+        }
+
+        .pixel-option:hover {
+            background-color: #334155;
+            border-color: #64748B;
+        }
+
+        .selected-correct {
+            background-color: #059669 !important; /* Green */
+            border-color: #34D399 !important;
+            color: #FFFFFF !important;
+        }
+
+        .selected-wrong {
+            background-color: #DC2626 !important; /* Red */
+            border-color: #F87171 !important;
+            color: #FFFFFF !important;
+        }
+
+        .progress-bar {
+            @apply h-2 bg-gray-700 relative;
+            border: 2px solid #10B981;
+        }
+
+        .progress-fill {
+            @apply h-full bg-yellow-400 absolute top-0 left-0;
+            transition: width 0.3s ease-in-out;
+            box-shadow: 0 0 5px #FBBF24;
+        }
+
+        /* Retro Text Effects */
+        .retro-title {
+            text-shadow: 4px 4px #000000;
+        }
+        
+        .pixel-input {
+            @apply w-full p-3 text-white bg-gray-800 border-2 border-gray-600 focus:border-yellow-400 outline-none font-mono text-lg;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <video autoplay muted loop id="video-background" preload="auto">
+        <source src="space.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+    <header class="w-full max-w-4xl mb-4 p-2 flex justify-between text-sm">
+        <div id="firebase-status" class="text-yellow-400">CONNECTING...</div>
+        <div id="user-id-display" class="text-gray-400">PILOT ID: loading...</div>
+    </header>
+
+    <main id="game-container" class="w-full max-w-4xl p-6 pixel-box flex flex-col items-center justify-center min-h-[500px]">
+        </main>
+
+    <footer class="w-full max-w-4xl mt-4 p-2 text-sm text-center text-gray-400">
+        <p>MISSION CONTROL: Pixel Pilot v1.0 | AUTH: Firebase</p>
+    </footer>
+
+    <script>
+        // --- Game Data Structure ---
+        const QUIZ_DATA = [
+            {
+                id: 1,
+                type: 'open_ended',
+                question: "If you were the captain of this ship, what would you name it? (e.g., 'The Stardust Cruiser')",
+                correctAnswer: "Any", // Always correct for fun input
+                lifeCost: 0, // No penalty for this fun question
+                scoreValue: 5 // Small bonus for completing
+            },
+            {
+                id: 2,
+                type: 'mcq',
+                question: "Which alien snack sounds tastiest for a long warp jump?",
+                options: [
+                    { text: "Nebula Nachos", isCorrect: true },
+                    { text: "Void Vinaigrette", isCorrect: false },
+                    { text: "Cosmic Cornbread", isCorrect: false },
+                    { text: "Black Hole Bananas", isCorrect: false }
+                ],
+                correctAnswer: "Nebula Nachos",
+                lifeCost: 1,
+                scoreValue: 10
+            },
+            {
+                id: 3,
+                type: 'yes_no',
+                question: "Should we trust the 'Universal Translator' that sounds suspiciously like a rusty robot?",
+                options: [{ text: "Yes", isCorrect: false }, { text: "No", isCorrect: true }],
+                correctAnswer: "No",
+                lifeCost: 1,
+                scoreValue: 10
+            },
+            {
+                id: 4,
+                type: 'rating',
+                question: "On a scale of 1 (Calm) to 5 (Panic!), how nervous are you about flying through an asteroid field?",
+                min: 1,
+                max: 5,
+                correctRange: [1, 2], // The "correct" answer is to be calm (low rating)
+                lifeCost: 1,
+                scoreValue: 10
+            },
+            {
+                id: 5,
+                type: 'mcq',
+                question: "What is the most stylish form of interstellar travel?",
+                options: [
+                    { text: "Hyperdrive", isCorrect: false },
+                    { text: "Quantum Tunneling", isCorrect: false },
+                    { text: "A Pink Space Scooter", isCorrect: true },
+                    { text: "Warp Speed", isCorrect: false }
+                ],
+                correctAnswer: "A Pink Space Scooter",
+                lifeCost: 1,
+                scoreValue: 10
+            }
+        ];
+
+        // --- Game State ---
+        let gameState = {
+            screen: 'login', // New initial state
+            currentQuestionIndex: 0,
+            lives: 3,
+            maxLives: 3,
+            score: 0,
+            pilotName: '', // Holds user-inputted name
+            secretCode: '', // Holds user-inputted code
+            isAnswering: false, // Prevents double clicking
+        };
+        // Expose gameState globally for saving score with pilot name
+        window.gameState = gameState;
+
+        // --- Helper Functions ---
+        
+        /** Converts a life count into pixelated heart characters. */
+        const renderHearts = (lives, maxLives) => {
+            const fullHeart = '&#10084;'; // ♥
+            const emptyHeart = '&#9825;'; // ♡
+            let heartString = '';
+            for (let i = 0; i < maxLives; i++) {
+                heartString += `<span class="heart-icon text-3xl mx-1">${i < lives ? fullHeart : emptyHeart}</span>`;
+            }
+            return heartString;
+        };
+
+        /** Renders the progress bar for the spaceship (metaphorical progress). */
+        const renderProgressBar = () => {
+            const progress = (gameState.currentQuestionIndex / QUIZ_DATA.length) * 100;
+            return `
+                <div class="w-full mt-4">
+                    <p class="text-sm uppercase text-gray-400">Mission Progress: ${gameState.currentQuestionIndex}/${QUIZ_DATA.length}</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${progress}%;"></div>
+                    </div>
+                </div>
+            `;
+        };
+
+        /** Renders the quiz header (Score and Lives). */
+        const renderQuizHeader = () => {
+            return `
+                <div class="w-full flex justify-between items-center mb-6">
+                    <div class="text-2xl uppercase">PILOT: <span class="text-blue-400">${gameState.pilotName.toUpperCase()}</span></div>
+                    <div class="flex items-center">
+                        <span class="text-2xl mr-2">SHIELDS:</span>
+                        <div id="lives-display">${renderHearts(gameState.lives, gameState.maxLives)}</div>
+                    </div>
+                </div>
+                ${renderProgressBar()}
+            `;
+        };
+
+        /** Renders the core HTML for a question based on its type. */
+        const renderQuestion = (q) => {
+            let optionsHtml = '';
+            let inputId = `q-${q.id}-input`;
+
+            switch (q.type) {
+                case 'mcq':
+                case 'yes_no':
+                    optionsHtml = q.options.map((opt, index) => `
+                        <button 
+                            class="pixel-option mb-3 transition-colors duration-200"
+                            data-answer="${opt.text}"
+                            onclick="handleAnswer('${q.type}', '${opt.text}')"
+                        >
+                            ${String.fromCharCode(65 + index)}. ${opt.text}
+                        </button>
+                    `).join('');
+                    break;
+
+                case 'rating':
+                    optionsHtml = `
+                        <div class="flex flex-col items-center justify-center space-y-4">
+                            <input 
+                                type="range" 
+                                id="${inputId}" 
+                                min="${q.min}" 
+                                max="${q.max}" 
+                                value="3" 
+                                class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                            >
+                            <div class="w-full flex justify-between text-base">
+                                <span>${q.min} (Calm)</span>
+                                <span id="rating-value">3</span>
+                                <span>${q.max} (Panic!)</span>
+                            </div>
+                            <button 
+                                class="pixel-button mt-4"
+                                onclick="handleAnswer('${q.type}', document.getElementById('${inputId}').value)"
+                            >
+                                CONFIRM RATING
+                            </button>
+                        </div>
+                    `;
+                    // Add listener to update rating display in real-time
+                    setTimeout(() => {
+                        const rangeInput = document.getElementById(inputId);
+                        const ratingValueSpan = document.getElementById('rating-value');
+                        if (rangeInput && ratingValueSpan) {
+                            rangeInput.oninput = () => {
+                                ratingValueSpan.textContent = rangeInput.value;
+                            };
+                        }
+                    }, 0);
+                    break;
+
+                case 'open_ended':
+                    optionsHtml = `
+                        <input 
+                            type="text" 
+                            id="${inputId}" 
+                            placeholder="Enter your command..." 
+                            class="pixel-input mb-4"
+                        >
+                        <button 
+                            class="pixel-button mt-4"
+                            onclick="handleAnswer('${q.type}', document.getElementById('${inputId}').value)"
+                        >
+                            TRANSMIT ANSWER
+                        </button>
+                    `;
+                    break;
+            }
+
+            return `
+                <h2 class="text-xl md:text-2xl mb-6 text-yellow-400 retro-title">SYSTEM PROMPT [Q${q.id}/${QUIZ_DATA.length}]</h2>
+                <div class="w-full max-w-2xl text-white p-4 mb-8 pixel-box bg-gray-900 border-yellow-400">
+                    <p class="text-lg leading-relaxed">${q.question}</p>
+                </div>
+                <div class="w-full max-w-md flex flex-col">
+                    ${optionsHtml}
+                </div>
+            `;
+        };
+        
+        // --- Core Game Screen Renderers ---
+
+        /** Renders the Pilot Login screen. */
+        const showLoginScreen = () => {
+            gameState.screen = 'login';
+            const container = document.getElementById('game-container');
+            container.innerHTML = `
+                <div class="text-center w-full max-w-sm">
+                    <h1 class="text-4xl md:text-5xl text-yellow-400 retro-title mb-4">PILOT LOG-IN</h1>
+                    <p class="text-xl text-white mb-8">AUTHENTICATION REQUIRED: Please identify yourself.</p>
+                    
+                    <div class="space-y-4 mb-8">
+                        <div>
+                            <label for="pilot-name" class="block text-left text-lg uppercase mb-1">Pilot Call Sign:</label>
+                            <input type="text" id="pilot-name" placeholder="Enter Name" value="${gameState.pilotName}" class="pixel-input" required>
+                        </div>
+                        <div>
+                            <label for="secret-code" class="block text-left text-lg uppercase mb-1">Spaceship Secret Code:</label>
+                            <input type="password" id="secret-code" placeholder="Enter Code (Any 4+ digits)" class="pixel-input" required>
+                        </div>
+                        <div id="login-error" class="text-red-500 text-sm hidden">ERROR: Pilot Call Sign and Secret Code are required.</div>
+                    </div>
+
+                    <button class="pixel-button w-full" onclick="handlePilotLogin()">[ COMMENCE PILOT LOGIN ]</button>
+                </div>
+            `;
+        };
+
+        /** Handles the login form submission. */
+        const handlePilotLogin = () => {
+            const pilotNameInput = document.getElementById('pilot-name');
+            const secretCodeInput = document.getElementById('secret-code');
+            const errorDisplay = document.getElementById('login-error');
+
+            const name = pilotNameInput.value.trim();
+            const code = secretCodeInput.value.trim();
+
+            if (name.length > 0 && code.length >= 4) {
+                gameState.pilotName = name;
+                gameState.secretCode = code;
+                errorDisplay.classList.add('hidden');
+                showMissionStart();
+            } else {
+                errorDisplay.textContent = 'ERROR: Pilot Call Sign (Name) and Secret Code (4+ digits) are required.';
+                errorDisplay.classList.remove('hidden');
+            }
+        };
+
+        /** Renders the initial start screen after login. (Original Landing Page) */
+        const showMissionStart = () => {
+            gameState.screen = 'landing';
+            const container = document.getElementById('game-container');
+            container.innerHTML = `
+                <div class="text-center">
+                    <img src="mainspaceship.gif" 
+                            alt="Pixelated Spaceship" 
+                            class="mb-8 mx-auto border-4 border-blue-400 p-2 shadow-lg"
+                            onerror="this.onerror=null; this.src='https://placehold.co/150x150/374151/FFFFFF?text=FAIL'" 
+                    />
+                    <h1 class="text-4xl md:text-5xl text-yellow-400 retro-title mb-4">PIXEL PILOT: SHIP COMMANDER</h1>
+                    <p class="text-xl text-white mb-4">WELCOME, CAPTAIN <span class="text-blue-400">${gameState.pilotName.toUpperCase()}</span>!</p>
+                    <p class="text-xl text-white mb-8">INITIATE COMMAND SEQUENCE? Failure to comply may result in system failure.</p>
+                    <button class="pixel-button" onclick="startGame()">[ START MISSION ]</button>
+                    <button class="pixel-button mt-4 bg-gray-600 hover:bg-gray-700" onclick="showLoginScreen()">[ CHANGE PILOT ]</button>
+                    <p class="mt-4 text-sm text-gray-500">Pilot ID: ${window.getUserId()}</p>
+                </div>
+            `;
+        };
+
+
+        /** Renders the current quiz question. */
+        const showQuiz = () => {
+            gameState.screen = 'quiz';
+            if (gameState.currentQuestionIndex >= QUIZ_DATA.length) {
+                showFeedback(true); 
+                return;
+            }
+            
+            const currentQ = QUIZ_DATA[gameState.currentQuestionIndex];
+            const container = document.getElementById('game-container');
+            container.innerHTML = `
+                ${renderQuizHeader()}
+                <div class="w-full flex-grow flex flex-col items-center justify-center p-4">
+                    ${renderQuestion(currentQ)}
+                </div>
+            `;
+        };
+
+        /** Renders the final success or failure screen. */
+        const showFeedback = (isSuccess) => {
+            gameState.screen = 'feedback';
+            window.saveScore(gameState.score, isSuccess ? 'Success' : 'Failure');
+
+            const container = document.getElementById('game-container');
+            let content;
+            let buttonAction;
+            let buttonText;
+            let title;
+            let titleColor;
+            let animation;
+
+            if (isSuccess) {
+                title = "MISSION COMPLETE! (CONGRATS)";
+                titleColor = "text-green-400";
+                content = `<p class="text-xl mb-4 text-white">The main drive is online. Your lighthearted decisions have saved the ship!</p>
+                            <p class="text-3xl text-yellow-400">FINAL SCORE: ${gameState.score}</p>`;
+                buttonAction = 'showMissionStart()';
+                buttonText = '[ START NEW MISSION ]';
+                // Success image
+                animation = `
+                    <img src="success.gif" 
+                            alt="Mission Success Image" 
+                            class="mb-8 mx-auto border-4 border-green-400 p-2 shadow-lg"
+                            onerror="this.onerror=null; this.src='https://placehold.co/150x150/374151/FFFFFF?text=FAIL'" 
+                    />
+                `;
+            } else {
+                title = "SYSTEM FAILURE! (INVADER ALERT)";
+                titleColor = "text-red-500";
+                content = `<p class="text-xl mb-4 text-white">Your ship has been critically damaged. Emergency protocols initiated. You ran out of shields!</p>
+                            <p class="text-3xl text-yellow-400">FINAL SCORE: ${gameState.score}</p>`;
+                buttonAction = 'startGame()';
+                buttonText = '[ RETRY MISSION ]';
+                // Failure image
+                animation = `
+                    <img src="explosion.gif" 
+                            alt="System Failure Image" 
+                            class="mb-8 mx-auto border-4 border-red-500 p-2 shadow-lg"
+                            onerror="this.onerror=null; this.src='https://placehold.co/150x150/374151/FFFFFF?text=FAIL'" 
+                    />
+                `;
+            }
+
+            container.innerHTML = `
+                <div class="text-center p-6">
+                    ${animation}
+                    <h1 class="text-4xl md:text-5xl ${titleColor} retro-title mb-4">${title}</h1>
+                    ${content}
+                    <button class="pixel-button mt-8" onclick="${buttonAction}">${buttonText}</button>
+                </div>
+            `;
+        };
+
+        // --- Game Logic ---
+
+        /** Resets state and starts the quiz. */
+        const startGame = () => {
+            // Preserve pilot name and code, reset game stats
+            gameState.currentQuestionIndex = 0;
+            gameState.lives = gameState.maxLives;
+            gameState.score = 0;
+            gameState.isAnswering = false;
+            showQuiz();
+        };
+
+        /** Moves to the next question or ends the game. */
+        const nextQuestion = () => {
+            gameState.isAnswering = false;
+            if (gameState.lives <= 0) {
+                showFeedback(false); // Fail screen
+            } else if (gameState.currentQuestionIndex < QUIZ_DATA.length - 1) {
+                gameState.currentQuestionIndex++;
+                showQuiz();
+            } else {
+                showFeedback(true); // Success screen
+            }
+        };
+
+        /** Processes the user's answer and updates score/lives. */
+        const handleAnswer = (type, userAnswer) => {
+            if (gameState.isAnswering) return;
+            gameState.isAnswering = true;
+
+            const q = QUIZ_DATA[gameState.currentQuestionIndex];
+            let isCorrect = false;
+            let normalizedAnswer = String(userAnswer).trim();
+
+            // Handle UI selection for immediate feedback (only for selectable buttons)
+            let selectedElement = null;
+            if (type === 'mcq' || type === 'yes_no') {
+                selectedElement = Array.from(document.querySelectorAll('.pixel-option'))
+                    .find(btn => btn.dataset.answer === userAnswer);
+                // Disable all options after selection
+                document.querySelectorAll('.pixel-option').forEach(btn => btn.disabled = true);
+            }
+            
+            // 1. Determine Correctness
+            switch (type) {
+                case 'mcq':
+                case 'yes_no':
+                    isCorrect = q.correctAnswer === normalizedAnswer;
+                    break;
+                case 'rating':
+                    const rating = parseInt(normalizedAnswer);
+                    isCorrect = rating >= q.correctRange[0] && rating <= q.correctRange[1];
+                    break;
+                case 'open_ended':
+                    // For the fun open-ended question, any input is "correct"
+                    isCorrect = q.correctAnswer === "Any" || q.correctAnswer.toLowerCase() === normalizedAnswer.toLowerCase();
+                    
+                    // Special case: If it's the "name your ship" question, save the input as the ship name
+                    if (q.id === 1) {
+                        if (normalizedAnswer.length > 0) {
+                            // Optionally store the ship name in game state or firebase later
+                            console.log(`Ship named: ${normalizedAnswer}`);
+                        }
+                    }
+                    break;
+            }
+            
+            // 2. Update State (Score/Lives)
+            let feedbackMessage = '';
+            
+            if (isCorrect) {
+                gameState.score += q.scoreValue || 10;
+                feedbackMessage = `CORRECT: System integrity maintained. +${q.scoreValue || 10} Score!`;
+                if (selectedElement) selectedElement.classList.add('selected-correct');
+            } else {
+                gameState.lives -= q.lifeCost;
+                feedbackMessage = `WRONG: Emergency shutdown initiated. -${q.lifeCost} Shield(s).`;
+                if (selectedElement) {
+                    selectedElement.classList.add('selected-wrong');
+                    // Highlight correct answer for visual feedback
+                    if (type === 'mcq' || type === 'yes_no') {
+                        const correctElement = Array.from(document.querySelectorAll('.pixel-option'))
+                            .find(btn => btn.dataset.answer === q.correctAnswer);
+                        if (correctElement) {
+                            correctElement.classList.add('selected-correct');
+                        }
+                    }
+                }
+            }
+
+            // 3. Show Animated Feedback and Next Button
+            const quizContent = document.querySelector('#game-container > .flex-grow');
+            const feedbackBox = document.createElement('div');
+            
+            feedbackBox.className = `
+                absolute inset-0 flex flex-col items-center justify-center 
+                ${isCorrect ? 'bg-green-900/90' : 'bg-red-900/90'} 
+                p-8 transition-opacity duration-300 opacity-0
+            `;
+
+            feedbackBox.innerHTML = `
+                <h3 class="text-3xl ${isCorrect ? 'text-green-400' : 'text-red-400'} retro-title mb-4">${isCorrect ? 'SUCCESSFUL COMMAND' : 'CRITICAL ERROR'}</h3>
+                <p class="text-xl text-white mb-8 text-center">${feedbackMessage}</p>
+                <button class="pixel-button" onclick="nextQuestion()">[ NEXT COMMAND ]</button>
+            `;
+
+            // Append feedback box and fade in
+            quizContent.appendChild(feedbackBox);
+            setTimeout(() => feedbackBox.classList.remove('opacity-0'), 10);
+        };
+
+        // --- Initialization ---
+        
+        // Setup Firebase and then display the login page
+        window.onload = () => {
+            setupFirebase();
+            showLoginScreen();
+        };
+    </script>
+</body>
+</html>
