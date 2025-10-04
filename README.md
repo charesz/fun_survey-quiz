@@ -1,6 +1,6 @@
 # Pixel Pilot Quiz: Ship Commander🚀🌠
 
-[Take the quiz here🚀]([https://charesz.github.io/fun_survey-quiz/])
+[Take the quiz here🚀](https://charesz.github.io/fun_survey-quiz/)
 
 Pixel Pilot Quiz: Ship Commander is a retro-styled, interactive web-based quiz game that immerses players in a spacefaring adventure. Players assume the role of a starship captain and answer fun, thematic questions to progress through missions, earn scores, and maintain their ship's integrity.
 
