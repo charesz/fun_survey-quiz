@@ -17,8 +17,7 @@ Pixel Pilot Quiz: Ship Commander is a retro-styled, interactive web-based quiz g
   - Supports potential leaderboard functionality.
 - **Video Background**: Immersive space environment with a looping video backdrop.
 - **Interactive Feedback**: Animated feedback for correct and incorrect answers.
-- **Responsive Layout**: Works on desktop and mobile devices using Tailwind CSS.
-
+- 
 ---
 
 ## 🛠️ Technologies Used
