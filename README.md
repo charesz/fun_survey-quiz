@@ -48,7 +48,7 @@ Pixel Pilot Quiz: Ship Commander is a retro-styled, interactive web-based quiz g
 
 ## 🎮 How to Play
 
-1. Open `index.html` in a web browser or click link [here.]([https://charesz.github.io/fun_survey-quiz/])
+1. Open `index.html` in a web browser or click link [here🌟.](https://charesz.github.io/fun_survey-quiz/)
 2. **Pilot Log-in**:
    - Enter your pilot call sign (any name).
    - Enter your spaceship secret code (minimum 4 digits).
